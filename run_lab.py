@@ -172,7 +172,7 @@ def analyze():
 
 def main():
     OUT.mkdir(exist_ok=True);LOG.mkdir(exist_ok=True);(OUT/'privado').mkdir(exist_ok=True)
-    procs=[];cap=None
+    procs=[];cap=None;capout=None
     try:
         for ns in NS:
             run(['ip','netns','add',ns]);run(['ip','link','set','lo','up'],ns)
@@ -205,7 +205,10 @@ def main():
         procs.append(child(['/usr/sbin/sshd','-D','-e','-f',str(priv/'sshd_config')],'labsrv','ssh_server.log'))
         time.sleep(.7)
         assert all(p.poll() is None for p,f in procs),[(p.returncode,f.name) for p,f in procs]
-        cap=child(['dumpcap','-i','eth0','-P','-f','arp or icmp or port 53 or tcp port 80 or tcp port 443 or tcp port 23 or tcp port 22','-w',str(OUT/'atividade1.pcap')],'labcli','dumpcap.log')
+        caplog=(LOG/'dumpcap.log').open('w')
+        capout=(OUT/'atividade1.pcap').open('wb')
+        capproc=subprocess.Popen(['ip','netns','exec','labcli','dumpcap','-i','eth0','-P','-f','arp or icmp or port 53 or tcp port 80 or tcp port 443 or tcp port 23 or tcp port 22','-w','-'],stdout=capout,stderr=caplog)
+        cap=(capproc,caplog)
         time.sleep(.8)
         assert cap[0].poll() is None,(LOG/'dumpcap.log').read_text()
         commands={}
@@ -224,7 +227,7 @@ def main():
         commands['netstat']=command_log('08_netstat',['netstat','-antp'])
         sshcode=sshp.wait(timeout=10);shlog.close();assert sshcode==0,(LOG/'ssh.txt').read_text()
         time.sleep(.3)
-        cap[0].send_signal(signal.SIGINT);cap[0].wait(timeout=5);cap[1].close();cap=None
+        cap[0].send_signal(signal.SIGINT);cap[0].wait(timeout=5);cap[1].close();capout.close();capout=None;cap=None
         (OUT/'comandos.json').write_text(json.dumps(commands,ensure_ascii=False,indent=2))
         for key in ['ping','traceroute','nslookup','http','https','telnet','netstat']:assert commands[key]['returncode']==0,(key,commands[key])
         (LOG/'ambiente.txt').write_text(run(['uname','-a'])['stdout']+run(['wireshark','--version'])['stdout']+run(['ip','-br','address'],'labcli')['stdout']+run(['ip','route'],'labcli')['stdout'])
@@ -235,6 +238,7 @@ def main():
             cap[0].send_signal(signal.SIGINT)
             with __import__('contextlib').suppress(Exception):cap[0].wait(timeout=3)
             cap[1].close()
+        if capout:capout.close()
         for p,f in procs:
             p.terminate()
             with __import__('contextlib').suppress(Exception):p.wait(timeout=3)
