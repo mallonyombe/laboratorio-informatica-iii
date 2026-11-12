@@ -202,8 +202,9 @@ def main():
         procs.append(child(['/usr/sbin/sshd','-D','-e','-f',str(priv/'sshd_config')],'labsrv','ssh_server.log'))
         time.sleep(.7)
         assert all(p.poll() is None for p,f in procs),[(p.returncode,f.name) for p,f in procs]
-        cap=child(['dumpcap','-i','eth0','-F','pcap','-f','arp or icmp or port 53 or tcp port 80 or tcp port 443 or tcp port 23 or tcp port 22','-w',str(OUT/'atividade1.pcap')],'labcli','dumpcap.log')
+        cap=child(['dumpcap','-i','eth0','-P','-f','arp or icmp or port 53 or tcp port 80 or tcp port 443 or tcp port 23 or tcp port 22','-w',str(OUT/'atividade1.pcap')],'labcli','dumpcap.log')
         time.sleep(.8)
+        assert cap[0].poll() is None,(LOG/'dumpcap.log').read_text()
         commands={}
         commands['ping']=command_log('01_ping',['ping','-c','4',SERVER])
         commands['traceroute']=command_log('02_traceroute',['traceroute','-n','-I','-m','5','-w','1',SERVER])
