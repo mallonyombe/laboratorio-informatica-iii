@@ -11,6 +11,7 @@ import hashlib
 import http.server
 import json
 import os
+import pwd
 from pathlib import Path
 import shlex
 import shutil
@@ -187,6 +188,8 @@ def main():
         resolv=Path('/etc/netns/labcli');resolv.mkdir(parents=True,exist_ok=True);(resolv/'resolv.conf').write_text('nameserver '+SERVER+'\noptions timeout:1 attempts:1\n')
         user=os.environ.get('SUDO_USER','runner')
         run(['id',user])
+        account=pwd.getpwnam(user)
+        os.chown(OUT,account.pw_uid,account.pw_gid)
         priv=OUT/'privado'
         for name in ['host_key','client_key']:
             run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(priv/name)])
