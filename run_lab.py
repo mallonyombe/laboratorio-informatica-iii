@@ -185,17 +185,16 @@ def main():
         run(['sysctl','-qw','net.ipv4.ip_forward=1'],'labrouter')
         for ns in ['labcli','labsrv']:run(['ethtool','-K','eth0','tx','off','rx','off','tso','off','gso','off','gro','off'],ns,check=False)
         resolv=Path('/etc/netns/labcli');resolv.mkdir(parents=True,exist_ok=True);(resolv/'resolv.conf').write_text('nameserver '+SERVER+'\noptions timeout:1 attempts:1\n')
-        user='labaluno'
-        if run(['id',user],check=False)['returncode']:run(['useradd','-m','-s','/bin/bash',user])
-        subprocess.run(['chpasswd'],input=user+':'+PASSWORD+'\n',text=True,check=True)
+        user=os.environ.get('SUDO_USER','runner')
+        run(['id',user])
         priv=OUT/'privado'
         for name in ['host_key','client_key']:
             run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(priv/name)])
-        authorized=Path('/home/labaluno/.ssh');authorized.mkdir(mode=0o700,exist_ok=True)
-        (authorized/'authorized_keys').write_bytes((priv/'client_key.pub').read_bytes())
-        run(['chown','-R',user+':'+user,str(authorized)]);authorized.chmod(0o700);(authorized/'authorized_keys').chmod(0o600)
+        authorized=priv/'authorized_keys'
+        authorized.write_bytes((priv/'client_key.pub').read_bytes())
+        run(['chown',user,str(authorized)]);authorized.chmod(0o600)
         Path('/run/sshd').mkdir(exist_ok=True)
-        (priv/'sshd_config').write_text(f'Port 22\nListenAddress {SERVER}\nHostKey {priv}/host_key\nPidFile {priv}/sshd.pid\nAuthorizedKeysFile .ssh/authorized_keys\nStrictModes yes\nPubkeyAuthentication yes\nAuthenticationMethods publickey\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nAllowUsers {user}\nAllowTcpForwarding no\nX11Forwarding no\nLogLevel VERBOSE\n')
+        (priv/'sshd_config').write_text(f'Port 22\nListenAddress {SERVER}\nHostKey {priv}/host_key\nPidFile {priv}/sshd.pid\nAuthorizedKeysFile {authorized}\nStrictModes yes\nPubkeyAuthentication yes\nAuthenticationMethods publickey\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM yes\nAllowUsers {user}\nAllowTcpForwarding no\nX11Forwarding no\nLogLevel VERBOSE\n')
         (priv/'known_hosts').write_text(SERVER+' '+(priv/'host_key.pub').read_text())
         run(['openssl','req','-x509','-newkey','rsa:2048','-sha256','-days','3','-nodes','-keyout',str(priv/'web.key'),'-out',str(priv/'web.crt'),'-subj','/CN=intranet.orbion.test/O=Laboratorio III','-addext','subjectAltName=DNS:intranet.orbion.test,DNS:www.orbion.test,IP:'+SERVER])
         for kind in ['http','https','telnet']:procs.append(child([sys.executable,str(Path(__file__).resolve()),'serve',kind],'labsrv',kind+'_server.log'))
