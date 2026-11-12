@@ -1,0 +1,39 @@
+name: Actividade 1 - captura e analise reais
+on:
+  push:
+    paths: ['run_lab.py', 'screenshots.py', '.github/workflows/atividade1.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  laboratorio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Instalar ferramentas oficiais dos repositorios Ubuntu
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wireshark tshark iproute2 iputils-ping traceroute net-tools dnsutils dnsmasq openssh-server openssl curl ethtool xvfb xterm openbox imagemagick fonts-dejavu-core
+      - name: Executar captura Ethernet e comandos em rede isolada
+        run: |
+          sudo python3 run_lab.py
+      - name: Tornar registos acessiveis ao utilizador da VM
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" evidencias || true
+      - name: Capturar interfaces reais do Wireshark e terminal
+        run: python3 screenshots.py
+      - name: Excluir chaves privadas descartaveis
+        if: always()
+        run: |
+          if test -d evidencias/privado; then sudo rm -rf evidencias/privado; fi
+      - name: Guardar provas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atividade1-provas-reais
+          path: evidencias/
+          retention-days: 7
+          if-no-files-found: error
