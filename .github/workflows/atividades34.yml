@@ -1,0 +1,33 @@
+name: Actividades 3 e 4 - VMs e seguranca
+on:
+  push:
+    paths: ['run_lab34.py', '.github/workflows/atividades34.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  laboratorio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Instalar ferramentas oficiais Ubuntu
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-system-x86 qemu-utils cloud-image-utils python3-yaml dnsmasq dnsutils iproute2 iptables conntrack wireguard-tools tcpdump tshark netcat-openbsd curl xvfb xterm openbox imagemagick fonts-dejavu-core
+      - name: Executar duas VMs e rede empresarial isolada
+        run: sudo python3 -u run_lab34.py
+      - name: Preparar evidencias e excluir chaves privadas do pacote
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" evidencias34 || true
+      - name: Guardar ficheiros e capturas reais
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atividades34-provas-reais
+          path: evidencias34/
+          retention-days: 7
+          if-no-files-found: error
