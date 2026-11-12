@@ -388,7 +388,20 @@ def activity4():
  ip('link','set','wg0','down',ns='r2')
  r=log(A4,'19_vpn_desligada_bloqueia.txt',['curl','--noproxy','*','--connect-timeout','2','--max-time','3','-sS','http://192.168.30.10/'],ns='filial',check_result=False)
  check('vpn_sem_fallback_em_texto_limpo',r.returncode!=0)
- ip('link','set','wg0','up',ns='r2');time.sleep(2)
+ ip('link','set','wg0','up',ns='r2')
+ # Link-down invalidates routes associated with this virtual interface on some
+ # kernels. Restore the private routes explicitly before waiting for rekeying.
+ for network in ['192.168.10.0/24','192.168.20.0/24','192.168.30.0/24']:
+  ip('route','replace',network,'dev','wg0',ns='r2')
+ retry=[]
+ for attempt in range(10):
+  probe=run(['curl','--noproxy','*','--connect-timeout','2','--max-time','3','-fsS','-o','/dev/null','-w','HTTP %{http_code}\n','http://192.168.30.10/'],ns='filial',check=False)
+  retry.append('Tentativa '+str(attempt+1)+'\n'+probe.stdout+probe.stderr)
+  if probe.returncode==0:break
+  time.sleep(2)
+ (A4/'Registos/20a_recuperacao_vpn.txt').write_text('\n'.join(retry))
+ log(A4,'20b_rotas_apos_recuperacao.txt',['ip','route'],ns='r2')
+ log(A4,'20c_wireguard_apos_recuperacao.txt',['wg','show','wg0'],ns='r2')
  r=log(A4,'20_vpn_restabelecida.txt',['curl','--noproxy','*','--max-time','8','-fsS','-o','/dev/null','-w','HTTP %{http_code}\n','http://192.168.30.10/'],ns='filial')
  check('vpn_recupera_apos_reativar','HTTP 200' in r.stdout)
  snap_command(A4,'01_vpn_e_rotas','sudo ip netns exec lab34-r1 wg show wg0; sudo ip netns exec lab34-r1 ip route; sudo ip netns exec lab34-r2 wg show wg0')
@@ -404,14 +417,21 @@ def main():
  save_results()
  if not all(v['ok'] for v in CHECKS.values()):raise RuntimeError('Existem verificacoes por resolver')
  print('TODAS_AS_VERIFICACOES_CONCLUIDAS',flush=True)
+ if '--manter' in sys.argv:
+  print('Laboratorio activo. Ctrl+C encerra as VMs e a rede criadas por este script.',flush=True)
+  while True:time.sleep(1)
 
 if __name__=='__main__':
  if len(sys.argv)>1 and sys.argv[1]=='externo':external_service()
  else:
   try:main()
+  except KeyboardInterrupt:print('A encerrar o laboratorio.',flush=True)
   finally:
    save_results()
    for p in reversed(PROCS):
     if p.poll() is None:
      try:p.terminate();p.wait(timeout=5)
      except Exception:p.kill()
+   for n in NS.values():run(['ip','netns','del',n],check=False)
+   for dev in ['l34-trunk','l34-admin','l34-tapcli','l34-tapsrv','lab34-sw']:
+    run(['ip','link','del',dev],check=False)
